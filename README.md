@@ -2,6 +2,8 @@
 
 A simple extension for Visual Studio Code to preview WireViz YAML files.
 
+![Screenshot](/img/screenshot.png)
+
 ## Prerequisites
 - [WireViz](https://github.com/wireviz/WireViz) 0.3.2 or later (which requires [Python](https://www.python.org/downloads/) 3.7 or later)
 - [Graphviz](https://graphviz.org/download/)
