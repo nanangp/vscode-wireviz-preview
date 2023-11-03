@@ -17,7 +17,7 @@ A simple extension for Visual Studio Code to preview WireViz YAML files.
 
 ## Limitations
 - Only works on files in a Workspace or Folder opened in VSCode. This will change when [WireViz#320](https://github.com/wireviz/WireViz/issues/320) is implemented.
-- Only tested with VSCode on Windows (without WSL). If anyone manages to run this on other platforms, please [let us know](#2).
+- Only tested with VSCode on Windows (without WSL). If anyone manages to run this on other platforms, please [let us know](https://github.com/nanangp/vscode-wireviz-preview/issues/2).
 
 ## Changelog
 See [CHANGELOG.md](CHANGELOG.md)
