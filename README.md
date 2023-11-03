@@ -7,7 +7,7 @@ A simple extension for Visual Studio Code to preview WireViz YAML files.
 - [Graphviz](https://graphviz.org/download/)
 
 ## Running
-1. Install extension from the VSCode Marketplace (TBD) - or build from source and install locally.
+1. Install extension from the [VSCode Marketplace](https://marketplace.visualstudio.com/items?itemName=NanangP.vscode-wireviz-preview) - or build from source and install locally.
 2. In VSCode, open a `Workspace` or `Folder` containing your files.
 3. Open a WireViz .yaml file.
 4. Use the `WireViz: Preview` button on the editor toolbar (right of tabs).
