@@ -1,0 +1,20 @@
+cables:
+  W1:
+    gauge: 0.25 mm2
+    show_equiv: true
+    length: 0.2
+    color_code: IEC
+    wirecount: 6
+    category: bundle
+
+connectors:
+  ferrule_crimp:
+    style: simple
+    autogenerate: true
+    type: Crimp ferrule
+
+connections:
+  -
+    - ferrule_crimp
+    - W1: [1-6]
+    - ferrule_crimp

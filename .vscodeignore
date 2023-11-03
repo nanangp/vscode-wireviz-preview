@@ -1,0 +1,10 @@
+# Ignore everything
+**
+
+# Whitelist what you need
+!out/*.js
+!img/icon.png
+!package.json
+!README.md
+!CHANGELOG.md
+!LICENSE

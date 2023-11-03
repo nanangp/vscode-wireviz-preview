@@ -1,0 +1,57 @@
+{
+  "name": "vscode-wireviz-preview",
+  "displayName": "WireViz Preview",
+  "description": "Previewer for WireViz YAML files",
+  "version": "0.0.2",
+  "publisher": "NanangP",
+  "icon": "img/icon.png",
+  "repository": "https://github.com/nanangp/vscode-wireviz-preview",
+  "engines": { "vscode": "^1.50.0" },
+  "categories": [ "Visualization", "Programming Languages" ],
+  "keywords": [ "wireviz", "preview" ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "wireviz.showPreview",
+        "title": "WireViz: Preview"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceLangId == yaml",
+          "command": "wireviz.showPreview",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "wireviz.showPreview",
+        "key": "f8",
+        "when": "editorTextFocus && resourceLangId == yaml"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "1.x",
+    "@types/mocha": "10.x",
+    "@types/node": "18.x",
+    "@typescript-eslint/eslint-plugin": "6.x",
+    "@typescript-eslint/parser": "6.x",
+    "eslint": "8.x",
+    "glob": "10.x",
+    "mocha": "10.x",
+    "typescript": "5.x",
+    "@vscode/test-electron": "2.x"
+  }
+}
