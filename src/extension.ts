@@ -3,14 +3,17 @@ import * as path from "path";
 import * as vscode from 'vscode';
 import {window} from 'vscode';
 
-const OutputSubfolder = "output";
 enum MsgType {
 	Err =  '🛑 ERROR:',
 	Warn = '🚧 WARNING:',
 	Info = '💬',
 }
 
+const OutputSubfolder = "output";
+const ImgFormat = ".svg";
+
 let wvpanel: vscode.WebviewPanel | undefined;
+let currResourceRoots: vscode.Uri[] | undefined;
 
 // This method is called when your extension is activated
 export function activate(context: vscode.ExtensionContext) {
@@ -27,16 +30,10 @@ function showPreview() {
 	const doc = window.activeTextEditor?.document;
 
 	// Ensure we have a panel so we can show either output or errors
-	createOrShowPreviewPanel();
+	createOrShowPreviewPanel(doc);
 
 	if (!doc || !isWirevizYamlFile(doc)) {
 		showMsg(MsgType.Err, `Not a WireViz YAML`);
-		return;
-	}
-
-	if (isFileOutsideWorkspace(doc)) {
-		showMsg(MsgType.Err, `Preview only works on files
-			inside a VSCode <strong>Workspace</strong> or <strong>Open Folder</strong>.`);
 		return;
 	}
 
@@ -58,15 +55,15 @@ function showPreview() {
 		${e.name}${e.message}<br/><br/>
 		Cannot invoke wireviz.<br/>
 		Please ensure WireViz and Graphviz are installed and invokable from the terminal.`));
-	// 'stderr' & 'stdout' are likely errors while running.
+	// 'stderr' & 'stdout' are errors during processing.
 	const errors: string[] = [];
 	process.stderr.on("data", d => errors.push(d));
 	process.stdout.on("data", d => errors.push(d));
 
 	process.on('exit', (code) => {
 		if (code === 0) {
-			const svgFileName = `${outFileNoExt}.svg`;
-			showImg(svgFileName);
+			const imgFileName = `${outFileNoExt}${ImgFormat}`;
+			showImg(imgFileName);
 		} else {
 			const errTxt = errors.join("<br/>").replaceAll('\n', '<br/>');
 			showMsg(MsgType.Err, errTxt);
@@ -74,20 +71,37 @@ function showPreview() {
 	});
 }
 
-function createOrShowPreviewPanel() {
+function createOrShowPreviewPanel(doc: vscode.TextDocument | undefined) {
+	// By default, Webview can only show files (our generated SVG) under the Workspace/Folder.
+	// If we want to show files elsewhere, we have to specify it using `localResourceRoots`.
+	// Unfortunately it's readonly, so we have to recreate the Webview when it changes.
+	const resourceRoots = doc ? getResourceRoots(doc) : undefined;
+	if (resourceRoots !== currResourceRoots) {
+		wvpanel?.dispose();
+		currResourceRoots = resourceRoots;
+	}
+
 	if (!wvpanel) {
 		wvpanel = window.createWebviewPanel(
 			'WireVizPreview',
 			'WireViz Preview',
 			vscode.ViewColumn.Beside,
-			{ enableScripts: false }
+			{
+				enableScripts: false,
+				localResourceRoots: currResourceRoots
+			}
 		);
 		wvpanel.onDidDispose(() => wvpanel = undefined); // Delete panel on dispose
-	} else {
-		if (!wvpanel.visible) {
-			wvpanel.reveal();
-		}
+	} else if (!wvpanel.visible) {
+		wvpanel.reveal();
 	}
+}
+
+function getResourceRoots(doc: vscode.TextDocument): vscode.Uri[] | undefined {
+	if (isFileOutsideWorkspace(doc)) {
+		return [vscode.Uri.file(path.dirname(doc.fileName))];
+	}
+	return undefined; // when undefined, `localResourceRoots` defaults to WS/Folder root.
 }
 
 function isFileOutsideWorkspace(doc: vscode.TextDocument): boolean {
