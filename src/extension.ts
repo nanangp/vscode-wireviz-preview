@@ -1,12 +1,12 @@
 import * as childProcess from "child_process";
 import * as path from "path";
-import * as vscode from 'vscode';
-import {window} from 'vscode';
+import * as vscode from "vscode";
+import {window} from "vscode";
 
 enum MsgType {
-	Err =  '🛑 ERROR:',
-	Warn = '🚧 WARNING:',
-	Info = '💬',
+	Err =  "🛑 ERROR:",
+	Warn = "🚧 WARNING:",
+	Info = "💬",
 }
 
 const OutputSubfolder = "output";
@@ -18,7 +18,7 @@ let currResourceRoots: vscode.Uri[] | undefined;
 // This method is called when your extension is activated
 export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
-		vscode.commands.registerCommand('wireviz.showPreview', showPreview)
+		vscode.commands.registerCommand("wireviz.showPreview", showPreview)
 	);
 }
 
@@ -33,7 +33,7 @@ function showPreview() {
 	createOrShowPreviewPanel(doc);
 
 	if (!doc || !isWirevizYamlFile(doc)) {
-		showMsg(MsgType.Err, `Not a WireViz YAML`);
+		showMsg(MsgType.Err, "Not a WireViz YAML");
 		return;
 	}
 
@@ -42,13 +42,13 @@ function showPreview() {
 		doc.save();
 	}
 
-	showMsg(MsgType.Info, `Generating diagram...`);
+	showMsg(MsgType.Info, "Generating diagram...");
 
 	let outFileNoExt = path
 		.join(path.dirname(doc.fileName), OutputSubfolder, path.basename(doc.fileName))
-		.replace(path.extname(doc.fileName), '');
+		.replace(path.extname(doc.fileName), "");
 
-	const process = childProcess.spawn('wireviz', [doc.fileName, "-o", outFileNoExt]);
+	const process = childProcess.spawn("wireviz", [doc.fileName, "-o", outFileNoExt]);
 
 	// 'error' is when we can't run wireviz.
 	process.on("error", e => showMsg(MsgType.Err, `
@@ -60,12 +60,12 @@ function showPreview() {
 	process.stderr.on("data", d => errors.push(d));
 	process.stdout.on("data", d => errors.push(d));
 
-	process.on('exit', (code) => {
+	process.on("exit", (code) => {
 		if (code === 0) {
 			const imgFileName = `${outFileNoExt}${ImgFormat}`;
 			showImg(imgFileName);
 		} else {
-			const errTxt = errors.join("<br/>").replaceAll('\n', '<br/>');
+			const errTxt = errors.join("<br/>").replaceAll("\n", "<br/>");
 			showMsg(MsgType.Err, errTxt);
 		}
 	});
@@ -83,8 +83,8 @@ function createOrShowPreviewPanel(doc: vscode.TextDocument | undefined) {
 
 	if (!wvpanel) {
 		wvpanel = window.createWebviewPanel(
-			'WireVizPreview',
-			'WireViz Preview',
+			"WireVizPreview",
+			"WireViz Preview",
 			vscode.ViewColumn.Beside,
 			{
 				enableScripts: false,
@@ -111,7 +111,7 @@ function isFileOutsideWorkspace(doc: vscode.TextDocument): boolean {
 // Rudimentary check for the minimum required contents of a WV yaml.
 const isWv: RegExp = /connections:|cables:|connectors:/gm;
 function isWirevizYamlFile(doc: vscode.TextDocument) {
-	return doc.languageId === 'yaml'
+	return doc.languageId === "yaml"
 		&& doc.getText()?.match(isWv)?.length === 3;
 }
 

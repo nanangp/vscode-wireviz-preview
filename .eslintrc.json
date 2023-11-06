@@ -20,6 +20,7 @@
         "curly": "warn",
         "eqeqeq": "warn",
         "no-throw-literal": "warn",
+        "quotes": "warn",
         "semi": "off"
     },
     "ignorePatterns": [
