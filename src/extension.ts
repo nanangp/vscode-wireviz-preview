@@ -1,7 +1,7 @@
 import * as childProcess from "child_process";
 import * as path from "path";
 import * as vscode from "vscode";
-import {window} from "vscode";
+import {window, TextDocument, Uri} from "vscode";
 
 enum MsgType {
 	Err =  "🛑 ERROR:",
@@ -13,17 +13,33 @@ const OutputSubfolder = "output";
 const ImgFormat = ".svg";
 
 let wvpanel: vscode.WebviewPanel | undefined;
-let currResourceRoots: vscode.Uri[] | undefined;
+let currResourceRoots: Uri[] | undefined;
 
 // This method is called when your extension is activated
 export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
-		vscode.commands.registerCommand("wireviz.showPreview", showPreview)
+		vscode.commands.registerCommand("wireviz.showPreview", showPreview),
+		vscode.workspace.onDidSaveTextDocument(onDocumentSaved)
 	);
 }
 
 export function deactivate() {
 	wvpanel?.dispose();
+}
+
+function onDocumentSaved(evt: TextDocument) {
+	const activeDoc = window.activeTextEditor?.document;
+	
+	// Scoped config. Workspace > User > Global.
+	const isRefreshOnSave = vscode.workspace
+		.getConfiguration("wireviz", activeDoc?.uri)
+		.get("refreshPreviewOnSave");
+
+	if (isRefreshOnSave
+			&& evt.uri === activeDoc?.uri
+			&& activeDoc?.languageId === "yaml") {
+		showPreview();
+	}
 }
 
 function showPreview() {
@@ -71,11 +87,16 @@ function showPreview() {
 	});
 }
 
-function createOrShowPreviewPanel(doc: vscode.TextDocument | undefined) {
+function createOrShowPreviewPanel(doc: TextDocument | undefined) {
 	// By default, Webview can only show files (our generated SVG) under the Workspace/Folder.
 	// If we want to show files elsewhere, we have to specify it using `localResourceRoots`.
 	// Unfortunately it's readonly, so we have to recreate the Webview when it changes.
 	const resourceRoots = doc ? getResourceRoots(doc) : undefined;
+
+	// If we have to dispose an existing one, we'd like to recreate at the same location
+	const wvpanelColumn = wvpanel?.viewColumn;
+	const docColumn = window.activeTextEditor?.viewColumn;
+
 	if (resourceRoots !== currResourceRoots) {
 		wvpanel?.dispose();
 		currResourceRoots = resourceRoots;
@@ -85,32 +106,38 @@ function createOrShowPreviewPanel(doc: vscode.TextDocument | undefined) {
 		wvpanel = window.createWebviewPanel(
 			"WireVizPreview",
 			"WireViz Preview",
-			vscode.ViewColumn.Beside,
+			wvpanelColumn ?? vscode.ViewColumn.Beside,
 			{
 				enableScripts: false,
 				localResourceRoots: currResourceRoots
 			}
 		);
 		wvpanel.onDidDispose(() => wvpanel = undefined); // Delete panel on dispose
+
+		// Return focus to text document. A little hacky.
+		if (doc && window.activeTextEditor && docColumn !== wvpanel.viewColumn) {
+			window.showTextDocument(doc, docColumn);
+		}
+		
 	} else if (!wvpanel.visible) {
 		wvpanel.reveal();
 	}
 }
 
-function getResourceRoots(doc: vscode.TextDocument): vscode.Uri[] | undefined {
+function getResourceRoots(doc: TextDocument): Uri[] | undefined {
 	if (isFileOutsideWorkspace(doc)) {
-		return [vscode.Uri.file(path.dirname(doc.fileName))];
+		return [Uri.file(path.dirname(doc.fileName))];
 	}
 	return undefined; // when undefined, `localResourceRoots` defaults to WS/Folder root.
 }
 
-function isFileOutsideWorkspace(doc: vscode.TextDocument): boolean {
+function isFileOutsideWorkspace(doc: TextDocument): boolean {
 	return vscode.workspace.getWorkspaceFolder(doc.uri) === undefined;
 }
 
 // Rudimentary check for the minimum required contents of a WV yaml.
 const isWv: RegExp = /connections:|cables:|connectors:/gm;
-function isWirevizYamlFile(doc: vscode.TextDocument) {
+function isWirevizYamlFile(doc: TextDocument) {
 	return doc.languageId === "yaml"
 		&& doc.getText()?.match(isWv)?.length === 3;
 }
@@ -123,7 +150,7 @@ function showMsg(msgType: MsgType, msg: string) {
 
 function showImg(imgFileName: string) {
 	if (wvpanel) {
-		const uri = vscode.Uri.file(imgFileName);
+		const uri = Uri.file(imgFileName);
 		const webviewUri = wvpanel.webview.asWebviewUri(uri);
 		wvpanel.webview.html = `<!DOCTYPE html>
 			<html><body style="${bodyStyle}">

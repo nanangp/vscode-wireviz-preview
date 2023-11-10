@@ -34,7 +34,17 @@
         "command": "wireviz.showPreview",
         "when": "editorTextFocus && resourceLangId == yaml"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "WireViz",
+      "properties": {
+        "wireviz.refreshPreviewOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Refresh WireViz preview on document save. (may be slow for large documents)"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
