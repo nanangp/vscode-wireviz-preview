@@ -9,8 +9,6 @@ enum MsgType {
 	Info = "💬",
 }
 
-const OutputSubfolder = "output";
-
 let wvpanel: vscode.WebviewPanel | undefined;
 let currResourceRoots: Uri[] | undefined;
 
@@ -53,8 +51,9 @@ function showPreview() {
 
 	show(MsgType.Info, "Generating diagram...");
 
+	const outPath = getConfig("outputPath", null) ?? ".";
 	let outFileNoExt = path
-		.join(path.dirname(doc.fileName), OutputSubfolder, path.basename(doc.fileName))
+		.join(path.dirname(doc.fileName), outPath, path.basename(doc.fileName))
 		.replace(path.extname(doc.fileName), "");
 
 	const process = childProcess.spawn("wireviz", [doc.fileName, "-o", outFileNoExt]);
