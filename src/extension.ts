@@ -10,7 +10,6 @@ enum MsgType {
 }
 
 const OutputSubfolder = "output";
-const ImgFormat = ".svg";
 
 let wvpanel: vscode.WebviewPanel | undefined;
 let currResourceRoots: Uri[] | undefined;
@@ -29,12 +28,7 @@ export function deactivate() {
 function onDocumentSaved(evt: TextDocument) {
 	const activeDoc = window.activeTextEditor?.document;
 
-	// Scoped config. Workspace > User > Global.
-	const isRefreshOnSave = vscode.workspace
-		.getConfiguration("wireviz", activeDoc?.uri)
-		.get("refreshPreviewOnSave");
-
-	if (isRefreshOnSave
+	if (getConfig("refreshPreviewOnSave", true)
 			&& evt.uri === activeDoc?.uri
 			&& activeDoc?.languageId === "yaml") {
 		showPreview();
@@ -77,7 +71,8 @@ function showPreview() {
 
 	process.on("exit", (code) => {
 		if (code === 0) {
-			const imgFileName = `${outFileNoExt}${ImgFormat}`;
+			const imgFormat = getConfig("previewFormat", "svg");
+			const imgFileName = `${outFileNoExt}.${imgFormat}`;
 			showImg(imgFileName);
 		} else {
 			const errTxt = errors.join("\n");
@@ -121,6 +116,12 @@ function createOrShowPreviewPanel(doc: TextDocument | undefined) {
 	} else if (!wvpanel.visible) {
 		wvpanel.reveal();
 	}
+}
+
+function getConfig<T>(section: string, defaultValue: T) {
+	return vscode.workspace  // Scoped config. Workspace > User > Global.
+		.getConfiguration("wireviz")
+		.get(section, defaultValue);
 }
 
 function getResourceRoots(doc: TextDocument): Uri[] | undefined {

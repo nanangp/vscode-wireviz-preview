@@ -42,6 +42,16 @@
           "type": "boolean",
           "default": true,
           "description": "Refresh WireViz preview on document save. (may be slow for large documents)"
+        },
+        "wireviz.previewFormat": {
+          "description": "Output format to preview.",
+          "type": "string",
+          "default": "svg",
+          "enum": ["svg", "png"],
+          "markdownEnumDescriptions": [
+            "Vector graphics. Zooms nicely, but doesn't show embedded images on VSCode.",
+            "Raster graphics. Doesn't zoom gracefully, but will show embedded images."
+          ]
         }
       }
     }
