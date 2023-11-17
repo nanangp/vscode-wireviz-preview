@@ -1,6 +1,6 @@
-import * as childProcess from "child_process";
-import * as path from "path";
-import * as vscode from "vscode";
+import childProcess from "child_process";
+import path from "path";
+import vscode from "vscode";
 import {window, TextDocument, Uri} from "vscode";
 
 enum MsgType {
@@ -15,7 +15,6 @@ const ImgFormat = ".svg";
 let wvpanel: vscode.WebviewPanel | undefined;
 let currResourceRoots: Uri[] | undefined;
 
-// This method is called when your extension is activated
 export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.commands.registerCommand("wireviz.showPreview", showPreview),
@@ -29,7 +28,7 @@ export function deactivate() {
 
 function onDocumentSaved(evt: TextDocument) {
 	const activeDoc = window.activeTextEditor?.document;
-	
+
 	// Scoped config. Workspace > User > Global.
 	const isRefreshOnSave = vscode.workspace
 		.getConfiguration("wireviz", activeDoc?.uri)
@@ -49,7 +48,7 @@ function showPreview() {
 	createOrShowPreviewPanel(doc);
 
 	if (!doc || !isWirevizYamlFile(doc)) {
-		showMsg(MsgType.Err, "Not a WireViz YAML");
+		show(MsgType.Err, "Not a WireViz YAML");
 		return;
 	}
 
@@ -58,7 +57,7 @@ function showPreview() {
 		doc.save();
 	}
 
-	showMsg(MsgType.Info, "Generating diagram...");
+	show(MsgType.Info, "Generating diagram...");
 
 	let outFileNoExt = path
 		.join(path.dirname(doc.fileName), OutputSubfolder, path.basename(doc.fileName))
@@ -67,7 +66,7 @@ function showPreview() {
 	const process = childProcess.spawn("wireviz", [doc.fileName, "-o", outFileNoExt]);
 
 	// 'error' is when we can't run wireviz.
-	process.on("error", e => showMsg(MsgType.Err, `
+	process.on("error", e => show(MsgType.Err, `
 		${e.name}${e.message}<br/><br/>
 		Cannot invoke wireviz.<br/>
 		Please ensure WireViz and Graphviz are installed and invokable from the terminal.`));
@@ -81,14 +80,15 @@ function showPreview() {
 			const imgFileName = `${outFileNoExt}${ImgFormat}`;
 			showImg(imgFileName);
 		} else {
-			const errTxt = errors.join("<br/>").replaceAll("\n", "<br/>");
-			showMsg(MsgType.Err, errTxt);
+			const errTxt = errors.join("\n");
+			show(MsgType.Err, errTxt);
 		}
 	});
 }
 
+/** Shows the preview panel, or create one if it does not yet exists. */
 function createOrShowPreviewPanel(doc: TextDocument | undefined) {
-	// By default, Webview can only show files (our generated SVG) under the Workspace/Folder.
+	// By default, Webview can only show files (our generated img) under the Workspace/Folder.
 	// If we want to show files elsewhere, we have to specify it using `localResourceRoots`.
 	// Unfortunately it's readonly, so we have to recreate the Webview when it changes.
 	const resourceRoots = doc ? getResourceRoots(doc) : undefined;
@@ -118,7 +118,6 @@ function createOrShowPreviewPanel(doc: TextDocument | undefined) {
 		if (doc && window.activeTextEditor && docColumn !== wvpanel.viewColumn) {
 			window.showTextDocument(doc, docColumn);
 		}
-		
 	} else if (!wvpanel.visible) {
 		wvpanel.reveal();
 	}
@@ -142,21 +141,28 @@ function isWirevizYamlFile(doc: TextDocument) {
 		&& doc.getText()?.match(isWv)?.length === 3;
 }
 
-function showMsg(msgType: MsgType, msg: string) {
+/** Shows message of the specified type on the Webview.
+ *  If the panel doesn't exist, the message will be ouput to the debug console.
+ */
+function show(msgType: MsgType, msg: string) {
 	if(wvpanel) {
-		wvpanel.webview.html = `<html><body style="${bodyStyle}">${msgType} ${msg}</body></html>`;
-	};
+		wvpanel.webview.html = `
+			<html><body style="${bodyStyle}">
+				${msgType} ${msg.replaceAll("\n", "<br/>")}
+			</body></html>`;
+	} else {
+		console.log(`${msgType} ${msg.replaceAll("<br/>", "\n")}`);
+	}
 }
 
 function showImg(imgFileName: string) {
 	if (wvpanel) {
 		const uri = Uri.file(imgFileName);
 		const webviewUri = wvpanel.webview.asWebviewUri(uri);
-		wvpanel.webview.html = `<!DOCTYPE html>
+		wvpanel.webview.html = `
 			<html><body style="${bodyStyle}">
 				<img src="${webviewUri}" style="${imgStyle}" alt="Diagram">
-			</body></html>
-		`;
+			</body></html>`;
 	}
 }
 
