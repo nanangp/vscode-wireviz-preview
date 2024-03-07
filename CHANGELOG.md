@@ -1,5 +1,8 @@
 # Change Log
 
+## [1.0.1] - 2024-03-07
+- [fix] Don't destroy panel when previewing files outside workspace. This should also fix #4
+
 ## [1.0.0] - 2023-11-17
 Seems stable enough to warrant a v1.0
 - [new] Refresh preview on document save.

@@ -2,7 +2,7 @@
   "name": "vscode-wireviz-preview",
   "displayName": "WireViz Preview",
   "description": "Previewer for WireViz YAML files",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "NanangP",
   "icon": "img/icon.png",
   "repository": { "type": "git", "url": "https://github.com/nanangp/vscode-wireviz-preview" },
