@@ -16,12 +16,12 @@ A simple extension for Visual Studio Code to preview WireViz YAML files.
    This behaviour can be disabled by setting `"wireviz.refreshPreviewOnSave": false`.
 
 ## Configuration
-Defaults are the first of the "Possible values" below.
-Config UI | settings.json | Possible values | Description
----|---|---|---
-Wireviz: Refresh Preview On Save | `wireviz.refreshPreviewOnSave` | `true`, `false` | Automatically refreshes preview on document save
-Wireviz: Output Path | `wireviz.outputPath` | `"output"`, `null` | When set, generates output files in an `/output` subdirectory. When `null`, output to the same location as the input file.
-Wireviz: Preview Format | `wireviz.previewFormat` | `"svg"`, `"png"` | Selects output file to be displayed in the preview window.
+The first (bolded) of the "Possible values" is the default if unspecified.
+| Config UI | settings.json | Possible values | Description |
+| --------- | ------------- | --------------- | ----------- |
+| Refresh Preview On Save | `wireviz.refreshPreviewOnSave` | **`true`**, `false` | Automatically refreshes preview on document save. |
+| Output Path | `wireviz.outputPath` | **`"output"`**, `null` | When set, generates output files in an `/output` subdirectory. When `null`, output to the same location as the input file. |
+| Preview Format | `wireviz.previewFormat` | **`"svg"`**, `"png"` | Selects output file to be displayed in the preview window. |
 
 
 ## ⚠ Limitations
