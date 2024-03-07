@@ -1,7 +1,7 @@
 import childProcess from "child_process";
 import path from "path";
 import vscode from "vscode";
-import {window, TextDocument, Uri} from "vscode";
+import {window, TextDocument, Uri, WebviewOptions} from "vscode";
 
 enum MsgType {
 	Err =  "🛑 ERROR:",
@@ -10,7 +10,6 @@ enum MsgType {
 }
 
 let wvpanel: vscode.WebviewPanel | undefined;
-let currResourceRoots: Uri[] | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
@@ -82,29 +81,20 @@ function showPreview() {
 
 /** Shows the preview panel, or create one if it does not yet exists. */
 function createOrShowPreviewPanel(doc: TextDocument | undefined) {
-	// By default, Webview can only show files (our generated img) under the Workspace/Folder.
-	// If we want to show files elsewhere, we have to specify it using `localResourceRoots`.
-	// Unfortunately it's readonly, so we have to recreate the Webview when it changes.
-	const resourceRoots = doc ? getResourceRoots(doc) : undefined;
-
-	// If we have to dispose an existing one, we'd like to recreate at the same location
-	const wvpanelColumn = wvpanel?.viewColumn;
 	const docColumn = window.activeTextEditor?.viewColumn;
 
-	if (resourceRoots !== currResourceRoots) {
-		wvpanel?.dispose();
-		currResourceRoots = resourceRoots;
+	if (wvpanel) {
+		wvpanel.webview.options = getWvOptions(doc);
+		if (!wvpanel.visible) {
+			wvpanel.reveal();
+		}
 	}
-
-	if (!wvpanel) {
+	else {
 		wvpanel = window.createWebviewPanel(
 			"WireVizPreview",
 			"WireViz Preview",
-			wvpanelColumn ?? vscode.ViewColumn.Beside,
-			{
-				enableScripts: false,
-				localResourceRoots: currResourceRoots
-			}
+			vscode.ViewColumn.Beside,
+			getWvOptions(doc)
 		);
 		wvpanel.onDidDispose(() => wvpanel = undefined); // Delete panel on dispose
 
@@ -112,8 +102,6 @@ function createOrShowPreviewPanel(doc: TextDocument | undefined) {
 		if (doc && window.activeTextEditor && docColumn !== wvpanel.viewColumn) {
 			window.showTextDocument(doc, docColumn);
 		}
-	} else if (!wvpanel.visible) {
-		wvpanel.reveal();
 	}
 }
 
@@ -123,11 +111,15 @@ function getConfig<T>(section: string, defaultValue: T) {
 		.get(section, defaultValue);
 }
 
-function getResourceRoots(doc: TextDocument): Uri[] | undefined {
-	if (isFileOutsideWorkspace(doc)) {
-		return [Uri.file(path.dirname(doc.fileName))];
-	}
-	return undefined; // when undefined, `localResourceRoots` defaults to WS/Folder root.
+function getWvOptions(doc: TextDocument | undefined): WebviewOptions {
+	// By default, Webview can only show files (our generated img) under the Workspace/Folder.
+	// If we want to show files elsewhere, we have to specify it using `localResourceRoots`.
+	return {
+		enableScripts: false,
+		localResourceRoots: (doc && isFileOutsideWorkspace(doc))
+			? [Uri.file(path.dirname(doc.fileName))]
+			: undefined // when undefined, `localResourceRoots` defaults to WS/Folder root.
+	};
 }
 
 function isFileOutsideWorkspace(doc: TextDocument): boolean {
