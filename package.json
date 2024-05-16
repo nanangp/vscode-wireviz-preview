@@ -2,7 +2,7 @@
   "name": "vscode-wireviz-preview",
   "displayName": "WireViz Preview",
   "description": "Previewer for WireViz YAML files",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "publisher": "NanangP",
   "icon": "img/icon.png",
   "repository": { "type": "git", "url": "https://github.com/nanangp/vscode-wireviz-preview" },
@@ -44,23 +44,18 @@
           "description": "Refresh WireViz preview on document save. (may be slow for large documents)"
         },
         "wireviz.outputPath" : {
-          "markdownDescription": "Produce output files in the specified subdirectory. \n\n **Warning**: If you have embedded images, this needs to be `Same as input file`, and `#wireviz.previewFormat#` should be set to `png`.",
-          "type": ["string", "null"],
-          "enum": ["output", null],
-          "default": "output",
-          "enumItemLabels": [
-            "./output subdirectory",
-            "Same as input file"
-          ]
+          "markdownDescription": "Produce output files in the specified subdirectory relative to the input file. \n\nLeave blank to output to the same dir as input file.",
+          "type": "string",
+          "default": ""
         },
         "wireviz.previewFormat": {
           "description": "Output format to preview.",
-"type": "string",
+          "type": "string",
           "default": "svg",
           "enum": ["svg", "png"],
           "markdownEnumDescriptions": [
-            "Vector graphics. Zooms nicely, but doesn't show embedded images on VSCode.",
-            "Raster graphics. Doesn't zoom gracefully, but will show embedded images."
+            "Vector graphics.",
+            "Raster graphics."
           ]
         }
       }

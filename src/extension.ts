@@ -9,6 +9,13 @@ enum MsgType {
 	Info = "💬",
 }
 
+// A character representing the desired output format.
+// See `wireviz --help` for complete list.
+const wvOutFormatChars = {
+	"svg": "s",
+	"png": "p",
+};
+
 let wvpanel: vscode.WebviewPanel | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
@@ -50,12 +57,19 @@ function showPreview() {
 
 	show(MsgType.Info, "Generating diagram...");
 
-	const outPath = getConfig("outputPath", null) ?? ".";
-	let outFileNoExt = path
-		.join(path.dirname(doc.fileName), outPath, path.basename(doc.fileName))
-		.replace(path.extname(doc.fileName), "");
+	const outPathRel = getConfig("outputPath", null) ?? ".";
+	const outPath = path.join(path.dirname(doc.fileName), outPathRel);
 
-	const process = childProcess.spawn("wireviz", [doc.fileName, "-o", outFileNoExt]);
+	const inputFileExt = new RegExp(`${path.extname(doc.fileName)}$`);
+	const outExt = getConfig("previewFormat", "svg");
+	const outFile = path
+		.join(outPath, path.basename(doc.fileName))
+		.replace(inputFileExt, `.${outExt}`);
+
+	const outFormat = wvOutFormatChars[outExt];
+
+	// WireViz 0.4 revamped -o and added -f
+	const process = childProcess.spawn("wireviz", [doc.fileName, "-o", outPath, "-f", outFormat]);
 
 	// 'error' is when we can't run wireviz.
 	process.on("error", e => show(MsgType.Err, `
@@ -67,11 +81,9 @@ function showPreview() {
 	process.stderr.on("data", d => errors.push(d));
 	process.stdout.on("data", d => errors.push(d));
 
-	process.on("exit", (code) => {
+	process.on("close", (code) => {
 		if (code === 0) {
-			const imgFormat = getConfig("previewFormat", "svg");
-			const imgFileName = `${outFileNoExt}.${imgFormat}`;
-			showImg(imgFileName);
+			showImg(outFile);
 		} else {
 			const errTxt = errors.join("\n");
 			show(MsgType.Err, errTxt);
@@ -127,10 +139,10 @@ function isFileOutsideWorkspace(doc: TextDocument): boolean {
 }
 
 // Rudimentary check for the minimum required contents of a WV yaml.
-const isWv: RegExp = /connections:|cables:|connectors:/gm;
+const isWvContent: RegExp = /connections:|cables:|connectors:/gm;
 function isWirevizYamlFile(doc: TextDocument) {
 	return doc.languageId === "yaml"
-		&& doc.getText()?.match(isWv)?.length === 3;
+		&& doc.getText()?.match(isWvContent)?.length === 3;
 }
 
 /** Shows message of the specified type on the Webview.
