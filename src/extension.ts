@@ -1,7 +1,7 @@
-import childProcess from "child_process";
+import aspawn from "await-spawn";
 import path from "path";
-import vscode from "vscode";
-import {window, TextDocument, Uri, WebviewOptions} from "vscode";
+import semver from "semver";
+import vscode, {window, TextDocument, Uri, WebviewOptions} from "vscode";
 
 enum MsgType {
 	Err =  "🛑 ERROR:",
@@ -9,86 +9,123 @@ enum MsgType {
 	Info = "💬",
 }
 
-// A character representing the desired output format.
-// See `wireviz --help` for complete list.
-const wvOutFormatChars = {
+/** Characters representing the desired output format. See `wireviz --help` for complete list. */
+const WvOutFormatChars = {
 	"svg": "s",
 	"png": "p",
 };
+/** This extension is only compatible with the specified WV version or above. */
+const WvMinVersion = "0.4.0";
+/** Regex to capture the WV executable version in the output of `wireviz -V` */
+const VersionRegex: RegExp = /WireViz ([\d\.]+)/;
+/** Title of the VSCode Output window used to log our errors. */
+const OutputLog = vscode.window.createOutputChannel("WireViz Preview", "log");
 
 let wvpanel: vscode.WebviewPanel | undefined;
+let isRunning = false;
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
-		vscode.commands.registerCommand("wireviz.showPreview", showPreview),
+		vscode.commands.registerCommand("wireviz.showPreview", async() => await showPreview()),
 		vscode.workspace.onDidSaveTextDocument(onDocumentSaved)
 	);
 }
 
-export function deactivate() {
+export async function deactivate() {
 	wvpanel?.dispose();
 }
 
-function onDocumentSaved(evt: TextDocument) {
+async function onDocumentSaved(evt: TextDocument) {
 	const activeDoc = window.activeTextEditor?.document;
 
 	if (getConfig("refreshPreviewOnSave", true)
 			&& evt.uri === activeDoc?.uri
 			&& activeDoc?.languageId === "yaml") {
-		showPreview();
+		await showPreview();
 	}
 }
 
-function showPreview() {
-	const doc = window.activeTextEditor?.document;
-
-	// Ensure we have a panel so we can show either output or errors
-	createOrShowPreviewPanel(doc);
-
-	if (!doc || !isWirevizYamlFile(doc)) {
-		show(MsgType.Err, "Not a WireViz YAML");
+async function showPreview() {
+	// Very basic locking to prevent concurrent calls, when someone accidentally
+	// re-triggers the event before previous operations have finished.
+	if (isRunning) {
 		return;
 	}
+	isRunning = true;
 
-	// Saving now. If you don't want to, too bad. WireViz doesn't work with stdin.
-	if (doc.isDirty) {
-		doc.save();
+	try {
+		const doc = window.activeTextEditor?.document;
+	
+		// Ensure we have a panel so we can show either output or errors
+		createOrShowPreviewPanel(doc);
+	
+		show(MsgType.Info, "Generating diagram...");
+
+		if (!doc || !isWirevizYamlFile(doc)) {
+			show(MsgType.Err, "Not a WireViz YAML");
+			return;
+		}
+	
+		if (await isAnyWirevizError()) {
+			return;
+		}
+	
+		// Saving now. If you don't want to, too bad. WireViz doesn't work with stdin.
+		if (doc.isDirty) {
+			doc.save();
+		}
+	
+		const outPathRel = getConfig("outputPath", null) ?? ".";
+		const outPath = path.join(path.dirname(doc.fileName), outPathRel);
+	
+		const inputFileExt = new RegExp(`${path.extname(doc.fileName)}$`);
+		const outExt = getConfig("previewFormat", "svg");
+		const outFile = path
+			.join(outPath, path.basename(doc.fileName))
+			.replace(inputFileExt, `.${outExt}`);
+	
+		const outFormat = WvOutFormatChars[outExt];
+	
+		try {
+			// WireViz 0.4 revamped -o to be only the output dir name, added -O for file basename,
+			// and added -f to specify output file formats.
+			// See: https://github.com/wireviz/WireViz/blob/v0.4/docs/CHANGELOG.md
+			const process = await aspawn("wireviz", [doc.fileName, "-o", outPath, "-f", outFormat]);
+			showImg(outFile);
+		} catch (e: any) {
+			if (e.stderr) {
+				show(MsgType.Err, e.stderr.toString());
+			} else if (e) {
+				show(MsgType.Err, `${e.name}${e.message}`);
+			}
+		}
+	} finally {
+		isRunning = false;
+	}
+}
+
+/** Ensures we can spawn WireViz, and that it has a version compatible with this extension. */
+async function isAnyWirevizError(): Promise<boolean> {
+	try {
+		const versionProc = await aspawn("wireviz", ["-V"]);
+
+		const verText = VersionRegex.exec(versionProc.toString())?.at(1) ?? "0.0";
+		const verSemantic = semver.coerce(verText)!;
+		if (semver.lt(verSemantic, WvMinVersion)) {
+			show(MsgType.Err, `This extension only supports WireViz version ${WvMinVersion} or higher. Found version ${verText}.`);
+			return true;
+		}
+	} catch (e: any) {
+		if (e.stderr) {
+			show(MsgType.Err, e.stderr.toString());
+		}
+		else if (e) {
+			show(MsgType.Err, `${e.name}${e.message}\n  Cannot call wireviz.\n  Please ensure WireViz and Graphviz are installed and can be called from the terminal.`);
+		}
+		return true;
 	}
 
-	show(MsgType.Info, "Generating diagram...");
-
-	const outPathRel = getConfig("outputPath", null) ?? ".";
-	const outPath = path.join(path.dirname(doc.fileName), outPathRel);
-
-	const inputFileExt = new RegExp(`${path.extname(doc.fileName)}$`);
-	const outExt = getConfig("previewFormat", "svg");
-	const outFile = path
-		.join(outPath, path.basename(doc.fileName))
-		.replace(inputFileExt, `.${outExt}`);
-
-	const outFormat = wvOutFormatChars[outExt];
-
-	// WireViz 0.4 revamped -o and added -f
-	const process = childProcess.spawn("wireviz", [doc.fileName, "-o", outPath, "-f", outFormat]);
-
-	// 'error' is when we can't run wireviz.
-	process.on("error", e => show(MsgType.Err, `
-		${e.name}${e.message}<br/><br/>
-		Cannot invoke wireviz.<br/>
-		Please ensure WireViz and Graphviz are installed and invokable from the terminal.`));
-	// 'stderr' & 'stdout' are errors during processing.
-	const errors: string[] = [];
-	process.stderr.on("data", d => errors.push(d));
-	process.stdout.on("data", d => errors.push(d));
-
-	process.on("close", (code) => {
-		if (code === 0) {
-			showImg(outFile);
-		} else {
-			const errTxt = errors.join("\n");
-			show(MsgType.Err, errTxt);
-		}
-	});
+	return false;
 }
 
 /** Shows the preview panel, or create one if it does not yet exists. */
@@ -117,8 +154,8 @@ function createOrShowPreviewPanel(doc: TextDocument | undefined) {
 	}
 }
 
-function getConfig<T>(section: string, defaultValue: T) {
-	return vscode.workspace  // Scoped config. Workspace > User > Global.
+function getConfig<T>(section: string, defaultValue: T): T {
+	return vscode.workspace // Scoped config. Workspace > User > Global.
 		.getConfiguration("wireviz")
 		.get(section, defaultValue);
 }
@@ -146,16 +183,26 @@ function isWirevizYamlFile(doc: TextDocument) {
 }
 
 /** Shows message of the specified type on the Webview.
- *  If the panel doesn't exist, the message will be ouput to the debug console.
+ *  The message will also be printed to an Output window.
  */
 function show(msgType: MsgType, msg: string) {
-	if(wvpanel) {
+	if (wvpanel) {
 		wvpanel.webview.html = `
 			<html><body style="${bodyStyle}">
 				${msgType} ${msg.replaceAll("\n", "<br/>")}
 			</body></html>`;
-	} else {
-		console.log(`${msgType} ${msg.replaceAll("<br/>", "\n")}`);
+	}
+
+	const curTime = (new Date).toLocaleTimeString(undefined, {hour12: false});
+	switch (msgType) {
+		case MsgType.Warn: {
+			OutputLog.appendLine(`${curTime} WARNING: ${msg}`);
+			OutputLog.show();
+		}
+		case MsgType.Err: {
+			OutputLog.appendLine(`${curTime} ERROR: ${msg}`);
+			OutputLog.show();
+		}
 	}
 }
 

@@ -10,7 +10,7 @@
 			"type": "extensionHost",
 			"request": "launch",
 			"args": [
-				"${workspaceFolder}/examples",
+				"C:\\dev\\Python\\WireViz\\examples",
 				"--extensionDevelopmentPath=${workspaceFolder}"
 			],
 			"outFiles": [
