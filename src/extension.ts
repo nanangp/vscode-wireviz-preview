@@ -1,168 +1,259 @@
-import childProcess from "child_process";
+import aspawn from "await-spawn";
 import path from "path";
-import vscode from "vscode";
-import {window, TextDocument, Uri, WebviewOptions} from "vscode";
+import semver from "semver";
+import vscode, {window, TextDocument, Uri, WebviewOptions} from "vscode";
 
 enum MsgType {
-	Err =  "🛑 ERROR:",
-	Warn = "🚧 WARNING:",
-	Info = "💬",
+	Debug = "DEBUG",
+	Info = "INFO",
+	Warn = "WARNING",
+	Err =  "ERROR",
 }
 
-let wvpanel: vscode.WebviewPanel | undefined;
+/** This extension is only compatible with the specified WV version or above. */
+const WvMinVersion = "0.4.0";
+/** Regex to capture the WV executable version in the output of `wireviz -V` */
+const VersionRegex: RegExp = /WireViz ([\d\.]+)/;
+/** Title of the VSCode Output window used to log our errors. */
+const OutputLog = vscode.window.createOutputChannel("WireViz Preview", "log");
+/** Custom WV arguments from configuration */
+type ConfiguredArgs = {
+	outputFormats: string;
+	outputDir: string;
+	outputName: string | undefined;
+	prepend: string | undefined;
+};
 
-export function activate(context: vscode.ExtensionContext) {
+let viewPanel: vscode.WebviewPanel | undefined;
+let isRunning = false;
+
+export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
-		vscode.commands.registerCommand("wireviz.showPreview", showPreview),
+		vscode.commands.registerCommand("wireviz.showPreview", async() => await showPreview()),
 		vscode.workspace.onDidSaveTextDocument(onDocumentSaved)
 	);
 }
 
-export function deactivate() {
-	wvpanel?.dispose();
+export async function deactivate() {
+	viewPanel?.dispose();
 }
 
-function onDocumentSaved(evt: TextDocument) {
+async function onDocumentSaved(evt: TextDocument) {
 	const activeDoc = window.activeTextEditor?.document;
 
 	if (getConfig("refreshPreviewOnSave", true)
 			&& evt.uri === activeDoc?.uri
 			&& activeDoc?.languageId === "yaml") {
-		showPreview();
+		await showPreview();
 	}
 }
 
-function showPreview() {
-	const doc = window.activeTextEditor?.document;
-
-	// Ensure we have a panel so we can show either output or errors
-	createOrShowPreviewPanel(doc);
-
-	if (!doc || !isWirevizYamlFile(doc)) {
-		show(MsgType.Err, "Not a WireViz YAML");
+async function showPreview() {
+	// Very basic locking to prevent concurrent calls, when someone accidentally
+	// re-triggers the event before previous operations have finished.
+	if (isRunning) {
 		return;
 	}
+	isRunning = true;
 
-	// Saving now. If you don't want to, too bad. WireViz doesn't work with stdin.
-	if (doc.isDirty) {
-		doc.save();
+	try {
+		const doc = window.activeTextEditor?.document;
+	
+		// Ensure we have a panel so we can show either output or errors
+		createOrShowPreviewPanel(doc, "");
+	
+		show(MsgType.Info, "Generating diagram...");
+
+		if (!doc || !isWirevizYamlFile(doc)) {
+			show(MsgType.Err, "Not a WireViz YAML");
+			return;
+		}
+	
+		if (await isAnyWirevizError()) {
+			return;
+		}
+	
+		// Saving now. If you don't want to, too bad. WireViz doesn't work with stdin.
+		if (doc.isDirty) {
+			doc.save();
+		}
+	
+		const cfgArgs = getArgsFromConfig(doc.fileName);
+		const wvArgs = getWvCmdlineArgs(doc.fileName, cfgArgs);
+		const outFile = getOutputFileFullpath(doc.fileName, cfgArgs);
+		createOrShowPreviewPanel(doc, cfgArgs.outputDir); // Tell panel we have external resources in the output dir
+
+		try {
+			show(MsgType.Debug, "wireviz ".concat(wvArgs.join(" ")));
+			const process = await aspawn("wireviz", wvArgs);
+			showImg(outFile);
+		} catch (e: any) {
+			if (e.stderr) {
+				show(MsgType.Err, e.stderr.toString());
+			} else if (e) {
+				show(MsgType.Err, `${e.name}${e.message}`);
+			}
+		}
+	} finally {
+		isRunning = false;
+	}
+}
+
+/** Ensures we can spawn WireViz, and that it has a version compatible with this extension. */
+async function isAnyWirevizError(): Promise<boolean> {
+	try {
+		const versionProc = await aspawn("wireviz", ["-V"]);
+
+		const verText = VersionRegex.exec(versionProc.toString())?.at(1) ?? "0.0";
+		const verSemantic = semver.coerce(verText)!;
+		if (semver.lt(verSemantic, WvMinVersion)) {
+			show(MsgType.Err, `This extension only supports WireViz version ${WvMinVersion} or higher. Found version ${verText}.`);
+			return true;
+		}
+	} catch (e: any) {
+		if (e.stderr) {
+			show(MsgType.Err, e.stderr.toString());
+		}
+		else if (e) {
+			show(MsgType.Err, `${e.name}${e.message}\n  Cannot call wireviz.\n  Please ensure WireViz and Graphviz are installed and can be called from the terminal.`);
+		}
+		return true;
 	}
 
-	show(MsgType.Info, "Generating diagram...");
+	return false;
+}
 
-	const outPath = getConfig("outputPath", null) ?? ".";
-	let outFileNoExt = path
-		.join(path.dirname(doc.fileName), outPath, path.basename(doc.fileName))
-		.replace(path.extname(doc.fileName), "");
+function getArgsFromConfig(inputFile: string): ConfiguredArgs {
+	const outputName = getConfig<string>("outputName", undefined)?.trim();
 
-	const process = childProcess.spawn("wireviz", [doc.fileName, "-o", outFileNoExt]);
+	let prepend = getConfig<string>("prepend", undefined)?.trim();
+	if (prepend && !path.isAbsolute(prepend)) {
+		prepend = path.join(path.dirname(inputFile), prepend);
+	}
+	
+	const outputFormats = getConfig("outputFormats", "")!.trim()
+		.concat("s"); // force svg
 
-	// 'error' is when we can't run wireviz.
-	process.on("error", e => show(MsgType.Err, `
-		${e.name}${e.message}<br/><br/>
-		Cannot invoke wireviz.<br/>
-		Please ensure WireViz and Graphviz are installed and invokable from the terminal.`));
-	// 'stderr' & 'stdout' are errors during processing.
-	const errors: string[] = [];
-	process.stderr.on("data", d => errors.push(d));
-	process.stdout.on("data", d => errors.push(d));
+	let outputDir = getConfig("outputDir", "")!.trim();
+	if (!path.isAbsolute(outputDir)) {
+		// Get full path relative to the input dir
+		outputDir = path.join(path.dirname(inputFile), outputDir);
+	}
+	
+	return {outputFormats, outputDir, outputName, prepend};
+}
 
-	process.on("exit", (code) => {
-		if (code === 0) {
-			const imgFormat = getConfig("previewFormat", "svg");
-			const imgFileName = `${outFileNoExt}.${imgFormat}`;
-			showImg(imgFileName);
-		} else {
-			const errTxt = errors.join("\n");
-			show(MsgType.Err, errTxt);
-		}
-	});
+function getWvCmdlineArgs(inputFile: string, cfgArgs: ConfiguredArgs) {
+	let cmdArgs = ["-f", cfgArgs.outputFormats, "-o", cfgArgs.outputDir];
+	if (cfgArgs.outputName) {
+		cmdArgs.push("-O", cfgArgs.outputName);
+	}
+	if (cfgArgs.prepend) {
+		cmdArgs.push("-p", cfgArgs.prepend);
+	}
+	cmdArgs.push(inputFile);
+	return cmdArgs;
+}
+
+function getOutputFileFullpath(inputFile: string, cfgArgs: ConfiguredArgs) {
+	const inputFileExt = new RegExp(`${path.extname(inputFile)}$`);
+	return path.join(cfgArgs.outputDir, cfgArgs.outputName
+		? `${cfgArgs.outputName}.svg`
+		: path.basename(inputFile).replace(inputFileExt, ".svg")
+	);
 }
 
 /** Shows the preview panel, or create one if it does not yet exists. */
-function createOrShowPreviewPanel(doc: TextDocument | undefined) {
+function createOrShowPreviewPanel(doc: TextDocument | undefined, outputDir: string) {
 	const docColumn = window.activeTextEditor?.viewColumn;
 
-	if (wvpanel) {
-		wvpanel.webview.options = getWvOptions(doc);
-		if (!wvpanel.visible) {
-			wvpanel.reveal();
+	if (viewPanel) {
+		viewPanel.webview.options = getWebviewOptions(outputDir);
+		if (!viewPanel.visible) {
+			viewPanel.reveal();
 		}
 	}
 	else {
-		wvpanel = window.createWebviewPanel(
+		viewPanel = window.createWebviewPanel(
 			"WireVizPreview",
 			"WireViz Preview",
 			vscode.ViewColumn.Beside,
-			getWvOptions(doc)
+			getWebviewOptions(outputDir)
 		);
-		wvpanel.onDidDispose(() => wvpanel = undefined); // Delete panel on dispose
+		viewPanel.onDidDispose(() => viewPanel = undefined); // Delete panel on dispose
 
 		// Return focus to text document. A little hacky.
-		if (doc && window.activeTextEditor && docColumn !== wvpanel.viewColumn) {
+		if (doc && window.activeTextEditor && docColumn !== viewPanel.viewColumn) {
 			window.showTextDocument(doc, docColumn);
 		}
 	}
 }
 
-function getConfig<T>(section: string, defaultValue: T) {
-	return vscode.workspace  // Scoped config. Workspace > User > Global.
+function getConfig<T>(section: string, defaultValue: T | undefined): T | undefined {
+	return vscode.workspace // Scoped config. Workspace > User > Global.
 		.getConfiguration("wireviz")
 		.get(section, defaultValue);
 }
 
-function getWvOptions(doc: TextDocument | undefined): WebviewOptions {
+function getWebviewOptions(outputDir: string): WebviewOptions {
 	// By default, Webview can only show files (our generated img) under the Workspace/Folder.
 	// If we want to show files elsewhere, we have to specify it using `localResourceRoots`.
 	return {
 		enableScripts: false,
-		localResourceRoots: (doc && isFileOutsideWorkspace(doc))
-			? [Uri.file(path.dirname(doc.fileName))]
+		localResourceRoots: (isOutsideWorkspace(outputDir))
+			? [Uri.file(outputDir)]
 			: undefined // when undefined, `localResourceRoots` defaults to WS/Folder root.
 	};
 }
 
-function isFileOutsideWorkspace(doc: TextDocument): boolean {
-	return vscode.workspace.getWorkspaceFolder(doc.uri) === undefined;
+function isOutsideWorkspace(dir: string): boolean {
+	return vscode.workspace.getWorkspaceFolder(Uri.file(dir)) === undefined;
 }
 
 // Rudimentary check for the minimum required contents of a WV yaml.
-const isWv: RegExp = /connections:|cables:|connectors:/gm;
+const isWvContent: RegExp = /connections:|cables:|connectors:/gm;
 function isWirevizYamlFile(doc: TextDocument) {
 	return doc.languageId === "yaml"
-		&& doc.getText()?.match(isWv)?.length === 3;
+		&& doc.getText()?.match(isWvContent)?.length === 3;
 }
 
 /** Shows message of the specified type on the Webview.
- *  If the panel doesn't exist, the message will be ouput to the debug console.
+ *  The message will also be printed to an Output window.
  */
 function show(msgType: MsgType, msg: string) {
-	if(wvpanel) {
-		wvpanel.webview.html = `
-			<html><body style="${bodyStyle}">
-				${msgType} ${msg.replaceAll("\n", "<br/>")}
+	if (viewPanel && msgType !== MsgType.Debug) {
+		viewPanel.webview.html = `
+			<html><head>${ViewPanelCss}</head><body>
+				${msgType}: ${msg.replaceAll("\n", "<br/>")}
 			</body></html>`;
-	} else {
-		console.log(`${msgType} ${msg.replaceAll("<br/>", "\n")}`);
+	}
+
+	const curTime = (new Date).toLocaleTimeString(undefined, {hour12: false});
+	OutputLog.appendLine(`${curTime} ${msgType}: ${msg}`);
+	
+	if ([MsgType.Warn, MsgType.Err].includes(msgType)) {
+		OutputLog.show();
 	}
 }
 
 function showImg(imgFileName: string) {
-	if (wvpanel) {
+	if (viewPanel) {
 		const uri = Uri.file(imgFileName);
-		const webviewUri = wvpanel.webview.asWebviewUri(uri);
-		wvpanel.webview.html = `
-			<html><body style="${bodyStyle}">
-				<img src="${webviewUri}" style="${imgStyle}" alt="Diagram">
+		const webviewUri = viewPanel.webview.asWebviewUri(uri);
+		viewPanel.webview.html = `
+			<html><head>${ViewPanelCss}</head><body>
+				<figure>
+					<img src="${webviewUri}" alt="Diagram">
+					<figcaption>${imgFileName}</figcaption>
+				</figure>
 			</body></html>`;
 	}
 }
 
-const bodyStyle = `
-	background-color: transparent;
-	font-size: medium;
-`;
-
-const imgStyle = `
-	width: 100%;
+const ViewPanelCss = `
+<style>
+	body { background-color: transparent; font-size: medium; padding: 5pt; }
+	figure, img { width: 100%; padding: 0; margin: 0; }
+	figcaption { font-size: small; }
+</style>
 `;

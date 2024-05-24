@@ -2,7 +2,7 @@
   "name": "vscode-wireviz-preview",
   "displayName": "WireViz Preview",
   "description": "Previewer for WireViz YAML files",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "publisher": "NanangP",
   "icon": "img/icon.png",
   "repository": { "type": "git", "url": "https://github.com/nanangp/vscode-wireviz-preview" },
@@ -43,46 +43,51 @@
           "default": true,
           "description": "Refresh WireViz preview on document save. (may be slow for large documents)"
         },
-        "wireviz.outputPath" : {
-          "markdownDescription": "Produce output files in the specified subdirectory. \n\n **Warning**: If you have embedded images, this needs to be `Same as input file`, and `#wireviz.previewFormat#` should be set to `png`.",
-          "type": ["string", "null"],
-          "enum": ["output", null],
-          "default": "output",
-          "enumItemLabels": [
-            "./output subdirectory",
-            "Same as input file"
-          ]
+        "wireviz.outputFormats": {
+          "markdownDescription": "Argument to `-f, --format`: A string containing one or more of the following characters to specify which file types to output: `g` (GV), `h` (HTML), `p` (PNG), `s` (SVG), `t` (TSV).\n\nNOTE: `s` (SVG) is always specified as it's the format used by the preview.\n\nExample: `hg` will generate HTML, GV, *and* SVG.",
+          "type": "string",
+          "default": ""
         },
-        "wireviz.previewFormat": {
-          "description": "Output format to preview.",
-"type": "string",
-          "default": "svg",
-          "enum": ["svg", "png"],
-          "markdownEnumDescriptions": [
-            "Vector graphics. Zooms nicely, but doesn't show embedded images on VSCode.",
-            "Raster graphics. Doesn't zoom gracefully, but will show embedded images."
-          ]
+        "wireviz.outputDir": {
+          "markdownDescription": "Argument to `-o, --output-dir`:  Directory to use for output files. Leave blank to use input file directory.",
+          "type": "string",
+          "default": ""
+        },
+        "wireviz.outputName": {
+          "markdownDescription": "Argument to `-O, --output-name`: File name (without extension) to use for output files, if different from input file name.",
+          "type": "string",
+          "default": ""
+        },
+        "wireviz.prepend": {
+          "markdownDescription": "Argument to `-p, --prepend`:  YAML file to prepend to the input file.",
+          "type": "string",
+          "default": ""
         }
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "vscode:prepublish": "npm run esbuild-base -- --minify",
+    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "esbuild": "npm run esbuild-base -- --sourcemap",
+    "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
     "lint": "eslint src --ext ts"
   },
+  "dependencies": {
+    "await-spawn": "4.x",
+    "semver": "7.x"
+  },
   "devDependencies": {
-    "@types/vscode": "1.x",
     "@types/mocha": "10.x",
     "@types/node": "18.x",
+    "@types/vscode": "1.x",
     "@typescript-eslint/eslint-plugin": "6.x",
     "@typescript-eslint/parser": "6.x",
+    "@vscode/test-electron": "2.x",
+    "esbuild": "^0.21.0",
     "eslint": "8.x",
     "glob": "10.x",
     "mocha": "10.x",
-    "typescript": "5.x",
-    "@vscode/test-electron": "2.x"
+    "typescript": "5.x"
   }
 }

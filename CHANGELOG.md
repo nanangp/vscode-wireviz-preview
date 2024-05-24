@@ -1,5 +1,10 @@
 # Change Log
 
+## [1.1.0] - 2024-05-24
+- [new] Supports WireViz 0.4.x. Will not work with 0.3 or prior.
+- [new] Ability to supply some custom cmdline arg values when invoking wireviz.
+- [fix] Error when generating preview in quick succession (e.g. tapping F8 multiple times).
+
 ## [1.0.1] - 2024-03-07
 - [fix] Don't destroy panel when previewing files outside workspace. This should also fix #4
 
