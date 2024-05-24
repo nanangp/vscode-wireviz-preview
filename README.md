@@ -16,13 +16,7 @@ A simple extension for Visual Studio Code to preview WireViz YAML files.
    This behaviour can be disabled by setting `"wireviz.refreshPreviewOnSave": false`.
 
 ## Configuration
-The first (bolded) of the "Possible values" is the default if unspecified.
-| Config UI | settings.json | Possible values | Description |
-| --------- | ------------- | --------------- | ----------- |
-| Refresh Preview On Save | `wireviz.refreshPreviewOnSave` | **`true`**, `false` | Automatically refreshes preview on document save. |
-| Output Path | `wireviz.outputPath` | blank, or relative path name | When set, generates output files in the specified path *relative* to the input file. When empty, output to the same path as the input file. |
-| Preview Format | `wireviz.previewFormat` | **`"svg"`**, `"png"` | Selects output file to be displayed in the preview window. |
-
+Open VSCode settings, filter for `WireViz`. You'll find settings for command-line args to specify, and a couple extension-specific settings.
 
 ## Troubleshooting
 - Please make sure you're running WireViz 0.4 or above. Their new command line options are incompatible with 0.3 and below.

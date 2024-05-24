@@ -2,7 +2,7 @@
   "name": "vscode-wireviz-preview",
   "displayName": "WireViz Preview",
   "description": "Previewer for WireViz YAML files",
-  "version": "1.1.0-rc.0",
+  "version": "1.1.0",
   "publisher": "NanangP",
   "icon": "img/icon.png",
   "repository": { "type": "git", "url": "https://github.com/nanangp/vscode-wireviz-preview" },
@@ -43,23 +43,25 @@
           "default": true,
           "description": "Refresh WireViz preview on document save. (may be slow for large documents)"
         },
-        "wireviz.outputPath": {
-          "markdownDescription": "Produce output files in the specified subdirectory relative to the input file. \n\nLeave blank to output to the same dir as input file.",
+        "wireviz.outputFormats": {
+          "markdownDescription": "Argument to `-f, --format`: A string containing one or more of the following characters to specify which file types to output: `g` (GV), `h` (HTML), `p` (PNG), `s` (SVG), `t` (TSV).\n\nNOTE: `s` (SVG) is always specified as it's the format used by the preview.\n\nExample: `hg` will generate HTML, GV, *and* SVG.",
           "type": "string",
           "default": ""
         },
-        "wireviz.previewFormat": {
-          "description": "Output format to preview.",
+        "wireviz.outputDir": {
+          "markdownDescription": "Argument to `-o, --output-dir`:  Directory to use for output files. Leave blank to use input file directory.",
           "type": "string",
-          "default": "svg",
-          "enum": [
-            "svg",
-            "png"
-          ],
-          "markdownEnumDescriptions": [
-            "Vector graphics.",
-            "Raster graphics."
-          ]
+          "default": ""
+        },
+        "wireviz.outputName": {
+          "markdownDescription": "Argument to `-O, --output-name`: File name (without extension) to use for output files, if different from input file name.",
+          "type": "string",
+          "default": ""
+        },
+        "wireviz.prepend": {
+          "markdownDescription": "Argument to `-p, --prepend`:  YAML file to prepend to the input file.",
+          "type": "string",
+          "default": ""
         }
       }
     }
